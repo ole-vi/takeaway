@@ -66,6 +66,18 @@ jobs:
           sha256sum output/myPlanet.aab > output/myPlanet.aab.sha256
           ls -alR output
 
+      - name: check apk with mobile security framework
+        run: |
+          docker run -itd -p 8000:8000 opensecurity/mobile-security-framework-mobsf:latest 
+          wget http://localhost:8000/api_docs
+          MOBSF_API_KEY=$(grep 'REST API Key' api_docs | cut -c 43-106)
+          FILE=output/myPlanet.apk
+          HASH=$(md5sum $FILE | awk '{print $1}')
+          curl -F "file=@$FILE" http://localhost:8000/api/v1/upload -H "Authorization:$MOBSF_API_KEY"
+          curl -X POST --url http://localhost:8000/api/v1/scan --data "scan_type=apk&file_name=$FILE&hash=$HASH" -H "Authorization:$MOBSF_API_KEY"
+          curl -X POST --url http://localhost:8000/api/v1/download_pdf --data "hash=$HASH" -H "Authorization:$MOBSF_API_KEY" --output output/myPlanet.pdf
+          ls -alR output
+
       - name: publish AAB to playstore
         if: github.ref == 'refs/heads/master'
         uses: r0adkll/upload-google-play@v1.1.2
