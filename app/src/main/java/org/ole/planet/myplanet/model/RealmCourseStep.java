@@ -3,6 +3,7 @@ package org.ole.planet.myplanet.model;
 import static org.ole.planet.myplanet.MainApplication.context;
 
 import android.util.Base64;
+import android.util.Log;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -38,14 +39,20 @@ public class RealmCourseStep extends io.realm.RealmObject {
             myCourseStepDB.setStepTitle(JsonUtils.getString("stepTitle", stepContainer));
             myCourseStepDB.setDescription(JsonUtils.getString("description", stepContainer));
             String description = JsonUtils.getString("description", stepContainer);
+
+            Log.d("description", description);
+            ArrayList<String> links2 =extractImageLinkWithoutJsoup(description);
             ArrayList<String> links = extractLinks(description);
             ArrayList<String> concatenatedLinks = new ArrayList<>();
+            Log.d("link2", String.valueOf(links2));
 
             String baseUrl = Utilities.getUrl();
             for (String link : links) {
                 String concatenatedLink = baseUrl +"/"+ link;
                 concatenatedLinks.add(concatenatedLink);
             }
+            concatenatedLinks.addAll(links2);
+
             Utilities.openDownloadService(context, concatenatedLinks);
             myCourseStepDB.setNoOfResources(JsonUtils.getJsonArray("resources", stepContainer).size());
             insertCourseStepsAttachments(myCoursesID, step_id, JsonUtils.getJsonArray("resources", stepContainer), mRealm);
@@ -61,6 +68,17 @@ public class RealmCourseStep extends io.realm.RealmObject {
             links.add(matcher.group(1));
         }
         return links;
+    }
+
+    public static ArrayList<String> extractImageLinkWithoutJsoup(String htmlCode) {
+        ArrayList<String> link2 = new ArrayList<>();
+        Pattern pattern = Pattern.compile("<img\\s+src=\"(.*?)\"");
+        Matcher matcher = pattern.matcher(htmlCode);
+        while (matcher.find()) {
+            link2.add(matcher.group(1));
+        }
+
+        return link2;
     }
 
     private static void insertExam(JsonObject stepContainer, Realm mRealm, String step_id, int i, String myCoursesID) {
