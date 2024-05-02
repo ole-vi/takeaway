@@ -120,10 +120,10 @@ object Utilities {
     fun getUrl(): String {
         val settings = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         if (settings.contains("couchdbURL")) {
-            var url = settings.getString("couchdbURL", "")
+            val url = settings.getString("couchdbURL", "")
 
             if (!url?.endsWith("/db")!!) {
-                url += "/db"
+                url
             }
             return url
         }
