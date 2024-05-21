@@ -1,5 +1,9 @@
 package org.ole.planet.myplanet.ui.sync
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -21,6 +25,8 @@ import org.ole.planet.myplanet.ui.feedback.FeedbackFragment
 import org.ole.planet.myplanet.ui.userprofile.TeamListAdapter
 import org.ole.planet.myplanet.utilities.FileUtils
 import org.ole.planet.myplanet.utilities.Utilities
+import java.net.InetAddress
+import java.net.UnknownHostException
 
 class LoginActivity : SyncActivity(), TeamListAdapter.OnItemClickListener {
     private lateinit var activityLoginBinding: ActivityLoginBinding
@@ -106,6 +112,42 @@ class LoginActivity : SyncActivity(), TeamListAdapter.OnItemClickListener {
                 }
             }
         })
+
+        val isWifiConnected = isConnectedToWifi(this)
+        if (isWifiConnected) {
+            val gatewayIpAddress = getGatewayIpAddress(this)
+            println("Connected to WiFi. Gateway IP: $gatewayIpAddress")
+        } else {
+            println("Not connected to WiFi.")
+        }
+
+    }
+
+    fun isConnectedToWifi(context: Context): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+    }
+
+    fun getGatewayIpAddress(context: Context): String? {
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val dhcpInfo = wifiManager.dhcpInfo
+        val gatewayIp = dhcpInfo.gateway
+        return try {
+            val inetAddress = InetAddress.getByAddress(
+                byteArrayOf(
+                    (gatewayIp and 0xFF).toByte(),
+                    (gatewayIp shr 8 and 0xFF).toByte(),
+                    (gatewayIp shr 16 and 0xFF).toByte(),
+                    (gatewayIp shr 24 and 0xFF).toByte()
+                )
+            )
+            inetAddress.hostAddress
+        } catch (e: UnknownHostException) {
+            e.printStackTrace()
+            null
+        }
     }
 
     fun getTeamMembers() {
