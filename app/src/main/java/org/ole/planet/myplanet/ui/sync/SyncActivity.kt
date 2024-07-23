@@ -6,8 +6,13 @@ import android.graphics.drawable.AnimationDrawable
 import android.os.Build
 import android.os.Bundle
 import android.text.*
+import android.util.Log
 import android.view.*
 import android.webkit.URLUtil
+import kotlinx.coroutines.*
+import retrofit2.HttpException
+import retrofit2.Response
+import okhttp3.ResponseBody
 import android.widget.*
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
@@ -16,10 +21,9 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 import com.afollestad.materialdialogs.*
 import com.google.android.material.textfield.TextInputLayout
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import io.realm.*
-import okhttp3.ResponseBody
+import org.json.JSONObject
 import org.ole.planet.myplanet.MainApplication.Companion.context
 import org.ole.planet.myplanet.MainApplication.Companion.createLog
 import org.ole.planet.myplanet.R
@@ -45,8 +49,7 @@ import org.ole.planet.myplanet.utilities.NotificationUtil.cancellAll
 import org.ole.planet.myplanet.utilities.Utilities.getRelativeTime
 import org.ole.planet.myplanet.utilities.Utilities.openDownloadService
 import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import retrofit2.await
 import java.io.File
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -86,6 +89,7 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
     lateinit var service: Service
     private var currentDialog: MaterialDialog? = null
     private var serverConfigAction = ""
+    private var lastCheckedUrl: String? = null
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -169,34 +173,66 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
         }
     }
 
+    private suspend fun <T> Call<T>.awaitResponse(): Response<T> {
+        return withContext(Dispatchers.IO) {
+            execute()
+        }
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
     @Throws(Exception::class)
-    fun isServerReachable(processedUrl: String?): Boolean {
+    fun isServerReachable(processedUrl: String?) {
+        if (processedUrl == lastCheckedUrl) {
+            return
+        }
+        lastCheckedUrl = processedUrl
+
         customProgressDialog?.setText(getString(R.string.connecting_to_server))
         customProgressDialog?.show()
-        val apiInterface = client?.create(ApiInterface::class.java)
-        apiInterface?.isPlanetAvailable("$processedUrl/_all_dbs")?.enqueue(
-            object : Callback<ResponseBody?> { override fun onResponse(call: Call<ResponseBody?>, response: Response<ResponseBody?>) {
-                try {
-                    customProgressDialog?.dismiss()
-                    val ss = response.body()?.string()
-                    val myList = ss?.split(",".toRegex())?.dropLastWhile { it.isEmpty() }?.let { listOf(*it.toTypedArray()) }
-                    if ((myList?.size ?: 0) < 8) {
-                        alertDialogOkay(getString(R.string.check_the_server_address_again_what_i_connected_to_wasn_t_the_planet_server))
-                    } else {
-                        startSync()
+
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val apiInterface = client?.create(ApiInterface::class.java)
+                val call: Call<ResponseBody>? = apiInterface?.isPlanetAvailable(processedUrl ?: "")
+                if (call != null) {
+                    val response: Response<ResponseBody> = call.awaitResponse()
+                    withContext(Dispatchers.Main) {
+                        customProgressDialog?.dismiss()
+                        if (response.isSuccessful) {
+                            val ss = response.body()?.string()
+                            Log.d("SyncActivity", "Server response: $ss")
+
+                            // Parse the JSON response
+                            val jsonObject = JSONObject(ss)
+                            val couchdb = jsonObject.optString("couchdb", "")
+                            val version = jsonObject.optString("version", "")
+                            val gitSha = jsonObject.optString("git_sha", "")
+                            val uuid = jsonObject.optString("uuid", "")
+                            val features = jsonObject.optJSONArray("features")
+                            val vendor = jsonObject.optJSONObject("vendor")
+
+                            if (couchdb.isEmpty() || version.isEmpty() || gitSha.isEmpty() || uuid.isEmpty() || features == null || vendor == null) {
+                                alertDialogOkay(getString(R.string.check_the_server_address_again_what_i_connected_to_wasn_t_the_planet_server))
+                            } else {
+                                startSync()
+                            }
+                        } else {
+                            alertDialogOkay(getString(R.string.device_couldn_t_reach_server_check_and_try_again))
+                        }
                     }
-                } catch (e: Exception) {
-                    alertDialogOkay(getString(R.string.device_couldn_t_reach_server_check_and_try_again))
+                }
+            } catch (e: HttpException) {
+                withContext(Dispatchers.Main) {
                     customProgressDialog?.dismiss()
+                    alertDialogOkay(getString(R.string.device_couldn_t_reach_server_check_and_try_again))
+                }
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    customProgressDialog?.dismiss()
+                    alertDialogOkay(getString(R.string.device_couldn_t_reach_server_check_and_try_again))
                 }
             }
-
-                override fun onFailure(call: Call<ResponseBody?>, t: Throwable) {
-                    alertDialogOkay(getString(R.string.device_couldn_t_reach_server_check_and_try_again))
-                    customProgressDialog?.dismiss()
-                }
-            })
-        return connectionResult
+        }
     }
 
     private fun dateCheck(dialog: MaterialDialog) {
@@ -735,7 +771,7 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
 
         fun clearRealmDb() {
             val realm = Realm.getDefaultInstance()
-            realm.executeTransaction { transactionRealm ->
+            realm.executeTransactionAsync { transactionRealm ->
                 transactionRealm.deleteAll()
             }
             realm.close()
