@@ -46,14 +46,14 @@ jobs:
           base_file=$(echo "${{ env.STRINGS }}" | head -n 1)
           base_lines=$(wc -l < "$base_file")
           echo "Base file: $base_file with $base_lines lines"
-          echo "${{ env.STRINGS }}" | while read -r file; do
+          while IFS= read -r file; do
             file_lines=$(wc -l < "$file")
             echo "Checking $file with $file_lines lines"
             if [ "$base_lines" -ne "$file_lines" ]; then
               echo "Line count mismatch: $file has $file_lines lines, expected $base_lines"
               exit 1
             fi
-          done
+          done <<< "${{ env.STRINGS }}"
 
       - name: check for .lite diffs
         if: matrix.build == 'lite'
