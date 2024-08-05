@@ -17,7 +17,7 @@ jobs:
     env:
       STRINGS: |
         app/src/main/res/values/strings.xml
-        app/src/main/res/values-es/strings.xml
+        app/src/main/res/values-ar/strings.xml
         app/src/main/res/values-es/strings.xml
         app/src/main/res/values-fr/strings.xml
         app/src/main/res/values-ne/strings.xml
@@ -36,7 +36,8 @@ jobs:
 
       - name: check for strings diffs
         run: |
-          lines=$(wc -l <<<"${{ env.STRINGS }}" | xargs)
+          #lines=$(wc -l <<<"${{ env.STRINGS }}" | xargs)
+          lines=1102
           for file in ${{ env.STRINGS }}; do
             if [ $(wc -l < "$file" | xargs) -ne $lines ]; then
               echo "line count mismatch in $file"
