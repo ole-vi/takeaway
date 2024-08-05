@@ -36,7 +36,7 @@ jobs:
 
       - name: check for strings diffs
         run: |
-          lines=1102
+          lines=$(wc -l <<<"${{ env.STRINGS }}" | xargs)
           for file in ${{ env.STRINGS }}; do
             if [ $(wc -l < "$file" | xargs) -ne $lines ]; then
               echo "line count mismatch in $file"
