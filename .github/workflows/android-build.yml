@@ -43,9 +43,13 @@ jobs:
           #    exit 1
           # fi
           #done
+          echo 1
           base_file=$(echo "${{ env.STRINGS }}" | head -n 1)
+          echo 2
           base_lines=$(wc -l < "$base_file")
+          echo 3
           echo "Base file: $base_file with $base_lines lines"
+          echo 4
           while IFS= read -r file; do
             file_lines=$(wc -l < "$file")
             echo "Checking $file with $file_lines lines"
