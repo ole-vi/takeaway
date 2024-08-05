@@ -36,7 +36,13 @@ jobs:
 
       - name: check for strings diffs
         run: |
-          echo "${{ env.LITES }}" | xargs -n 1
+          lines=$(wc -l <<<"${{ env.STRINGS }}" | xargs)
+          for file in ${{ env.STRINGS }}; do
+            if [ $(wc -l < "$file" | xargs) -ne $lines ]; then
+              echo "line count mismatch in $file"
+              exit 1
+            fi
+          done
 
       - name: check for .lite diffs
         if: matrix.build == 'lite'
