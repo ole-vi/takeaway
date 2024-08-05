@@ -15,6 +15,13 @@ jobs:
       matrix:
         build: [default, lite]
     env:
+      STRINGS: |
+        app/src/main/res/values/strings.xml
+        app/src/main/res/values-ar/strings.xml
+        app/src/main/res/values-es/strings.xml
+        app/src/main/res/values-fr/strings.xml
+        app/src/main/res/values-ne/strings.xml
+        app/src/main/res/values-so/strings.xml
       LITES: |
         app/src/main/AndroidManifest.xml
         app/src/main/java/org/ole/planet/myplanet/base/PermissionActivity.kt
@@ -26,6 +33,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: check for strings diffs
+        run: |
+          echo "${{ env.LITES }}" | xargs -n 1
 
       - name: check for .lite diffs
         if: matrix.build == 'lite'
