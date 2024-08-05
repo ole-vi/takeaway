@@ -45,6 +45,7 @@ jobs:
           #done
           echo 1
           base_file=$(echo "${{ env.STRINGS }}" | head -n 1)
+          cat $base_file
           echo 2
           base_lines=$(wc -l < "$base_file")
           echo 3
