@@ -10,6 +10,7 @@ import com.github.barteksc.pdfviewer.listener.OnPageChangeListener
 import com.github.barteksc.pdfviewer.listener.OnPageErrorListener
 import com.github.barteksc.pdfviewer.scroll.DefaultScrollHandle
 import io.realm.Realm
+import okhttp3.OkHttpClient
 import org.ole.planet.myplanet.R
 import org.ole.planet.myplanet.databinding.ActivityPdfreaderBinding
 import org.ole.planet.myplanet.datamanager.DatabaseService
@@ -23,6 +24,9 @@ import org.ole.planet.myplanet.utilities.NotificationUtil.cancelAll
 import org.ole.planet.myplanet.utilities.NotificationUtil.create
 import org.ole.planet.myplanet.utilities.Utilities
 import java.io.File
+import java.io.InputStream
+import okhttp3.*
+import java.io.IOException
 
 class PDFReaderActivity : AppCompatActivity(), OnPageChangeListener, OnLoadCompleteListener, OnPageErrorListener, AudioRecordListener {
     private lateinit var activityPdfReaderBinding: ActivityPdfreaderBinding
@@ -58,28 +62,92 @@ class PDFReaderActivity : AppCompatActivity(), OnPageChangeListener, OnLoadCompl
     private fun renderPdfFile() {
         val pdfOpenIntent = intent
         fileName = pdfOpenIntent.getStringExtra("TOUCHED_FILE")
-        if (!fileName.isNullOrEmpty()) {
-            activityPdfReaderBinding.pdfFileName.text = FileUtils.nameWithoutExtension(fileName)
-            activityPdfReaderBinding.pdfFileName.visibility = View.VISIBLE
-        } else {
-            activityPdfReaderBinding.pdfFileName.text = getString(R.string.message_placeholder, "No file selected")
-            activityPdfReaderBinding.pdfFileName.visibility = View.VISIBLE
+        val fileUrl = pdfOpenIntent.getStringExtra("PDF_URL")
+        if (!fileUrl.isNullOrEmpty()) {
+            fetchPdfFromUrl(fileUrl)
         }
-        val file = File(getExternalFilesDir(null), "ole/$fileName")
-        if (file.exists()) {
-            try {
-                activityPdfReaderBinding.pdfView.fromFile(file).defaultPage(0)
-                    .enableAnnotationRendering(true).onLoad(this).onPageChange(this)
-                    .scrollHandle(DefaultScrollHandle(this)).load()
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Toast.makeText(applicationContext, getString(R.string.unable_to_load) + fileName, Toast.LENGTH_LONG).show()
+        //        else {
+//            if (!fileName.isNullOrEmpty()) {
+//                activityPdfReaderBinding.pdfFileName.text = FileUtils.nameWithoutExtension(fileName)
+//                activityPdfReaderBinding.pdfFileName.visibility = View.VISIBLE
+//            } else {
+//                activityPdfReaderBinding.pdfFileName.text = getString(R.string.message_placeholder, "No file selected")
+//                activityPdfReaderBinding.pdfFileName.visibility = View.VISIBLE
+//            }
+//            val file = File(getExternalFilesDir(null), "ole/$fileName")
+//            if (file.exists()) {
+//                try {
+//                    activityPdfReaderBinding.pdfView.fromFile(file).defaultPage(0)
+//                        .enableAnnotationRendering(true).onLoad(this).onPageChange(this)
+//                        .scrollHandle(DefaultScrollHandle(this)).load()
+//                } catch (e: Exception) {
+//                    e.printStackTrace()
+//                    Toast.makeText(
+//                        applicationContext,
+//                        getString(R.string.unable_to_load) + fileName,
+//                        Toast.LENGTH_LONG
+//                    ).show()
+//                }
+//            } else {
+//                Toast.makeText(applicationContext, "File not found: $fileName", Toast.LENGTH_LONG)
+//                    .show()
+//            }
+//        }
+    }
+
+    private fun fetchPdfFromUrl(url: String) {
+        val client = OkHttpClient()
+        val request = Request.Builder().url(url).build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    Toast.makeText(this@PDFReaderActivity, "Failed to load PDF: ${e.message}", Toast.LENGTH_LONG).show()
+                }
             }
-        } else {
-            Toast.makeText(applicationContext, "File not found: $fileName", Toast.LENGTH_LONG)
-                .show()
+
+            override fun onResponse(call: Call, response: Response) {
+                if (response.isSuccessful && response.body()?.contentType()?.subtype() == "pdf") {
+                    val inputStream = response.body()?.byteStream()
+                    if (inputStream != null) {
+                        val file = File(getExternalFilesDir(null), "downloaded_temp.pdf")
+                        try {
+                            file.outputStream().use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                            runOnUiThread {
+                                displayPdfFromFile(file)
+                            }
+                        } catch (e: IOException) {
+                            runOnUiThread {
+                                Toast.makeText(this@PDFReaderActivity, "Failed to save PDF: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@PDFReaderActivity, "Failed to load PDF: File is not a PDF or corrupted.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        })
+    }
+
+    private fun displayPdfFromFile(file: File) {
+        try {
+            activityPdfReaderBinding.pdfView.fromFile(file)
+                .defaultPage(0)
+                .enableAnnotationRendering(true)
+                .onLoad(this)
+                .onPageChange(this)
+                .scrollHandle(DefaultScrollHandle(this))
+                .load()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(applicationContext, getString(R.string.unable_to_load), Toast.LENGTH_LONG).show()
         }
     }
+
 
     override fun loadComplete(nbPages: Int) {}
     override fun onPageChanged(page: Int, pageCount: Int) {}

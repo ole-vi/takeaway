@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.TextUtils
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -122,6 +123,8 @@ abstract class BaseContainerFragment : BaseResourceFragment() {
     private fun openPdf(item: RealmMyLibrary) {
         val fileOpenIntent = Intent(activity, PDFReaderActivity::class.java)
         fileOpenIntent.putExtra("TOUCHED_FILE", item.id + "/" + item.resourceLocalAddress)
+        Log.d("PDF", "openPdf: ${item.resourceRemoteAddress}")
+        fileOpenIntent.putExtra("PDF_URL", "${item.resourceRemoteAddress}")
         fileOpenIntent.putExtra("resourceId", item.id)
         startActivity(fileOpenIntent)
     }
