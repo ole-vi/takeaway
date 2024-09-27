@@ -96,46 +96,57 @@ abstract class BaseResourceFragment : Fragment() {
     }
 
     protected fun showDownloadDialog(dbMyLibrary: List<RealmMyLibrary?>) {
-        if (isAdded) {
-            Service(MainApplication.context).isPlanetAvailable(object : PlanetAvailableListener {
-                override fun isAvailable() {
-                    if (dbMyLibrary.isNotEmpty()) {
-                        if (!isAdded) {
-                            return
+        if (!isAdded) return
+
+        Service(MainApplication.context).isPlanetAvailable(object : PlanetAvailableListener {
+            override fun isAvailable() {
+                if (dbMyLibrary.isEmpty()) {
+                    Utilities.toast(requireContext(), getString(R.string.no_resources_to_download))
+                    return
+                }
+
+                val inflater = activity?.layoutInflater ?: return
+                val rootView = requireActivity().findViewById<ViewGroup>(android.R.id.content)
+                convertView = inflater.inflate(R.layout.my_library_alertdialog, rootView, false)
+
+                val alertDialogBuilder = AlertDialog.Builder(requireContext(), R.style.AlertDialogTheme)
+                    .setView(convertView)
+                    .setTitle(R.string.download_suggestion)
+                    .setPositiveButton(R.string.download_selected, null)
+                    .setNeutralButton(R.string.download_all, null)
+                    .setNegativeButton(R.string.txt_cancel, null)
+
+                val alertDialog = alertDialogBuilder.create()
+
+                alertDialog.setOnShowListener { dialog ->
+                    val positiveButton = (dialog as AlertDialog).getButton(AlertDialog.BUTTON_POSITIVE)
+                    positiveButton.setOnClickListener {
+                        lv?.selectedItemsList?.let {
+                            addToLibrary(dbMyLibrary, it)
+                            downloadFiles(dbMyLibrary, it)
+                        }?.let { startDownload(it) }
+                        dialog.dismiss()
+                    }
+
+                    val neutralButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
+                    neutralButton.setOnClickListener {
+                        lv?.selectedItemsList?.let {
+                            addAllToLibrary(dbMyLibrary)
                         }
-                        val inflater = activity?.layoutInflater
-                        val rootView = requireActivity().findViewById<ViewGroup>(android.R.id.content)
-                        convertView = inflater?.inflate(R.layout.my_library_alertdialog, rootView, false)
-                        val alertDialogBuilder = AlertDialog.Builder(requireContext(), R.style.AlertDialogTheme)
-                        alertDialogBuilder.setView(convertView).setTitle(R.string.download_suggestion)
-                        alertDialogBuilder.setPositiveButton(R.string.download_selected) { _: DialogInterface?, _: Int ->
-                            lv?.selectedItemsList?.let {
-                                addToLibrary(dbMyLibrary, it)
-                                downloadFiles(dbMyLibrary, it)
-                            }?.let { startDownload(it) }
-                        }.setNeutralButton(R.string.download_all) { _: DialogInterface?, _: Int ->
-                            lv?.selectedItemsList?.let {
-                                addAllToLibrary(dbMyLibrary)
-                            }
-                            startDownload(downloadAllFiles(dbMyLibrary))
-                        }.setNegativeButton(R.string.txt_cancel, null)
-                        val alertDialog = alertDialogBuilder.create()
-                        createListView(dbMyLibrary, alertDialog)
-                        alertDialog.show()
-                        alertDialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = (lv?.selectedItemsList?.size ?: 0) > 0
-                    } else {
-                        Utilities.toast(requireContext(), getString(R.string.no_resources_to_download))
+                        startDownload(downloadAllFiles(dbMyLibrary))
+                        dialog.dismiss()
                     }
                 }
 
-                override fun notAvailable() {
-                    if (!isAdded) {
-                        return
-                    }
-                    Utilities.toast(requireContext(), getString(R.string.planet_not_available))
-                }
-            })
-        }
+                createListView(dbMyLibrary, alertDialog)
+                alertDialog.show()
+            }
+
+            override fun notAvailable() {
+                if (!isAdded) return
+                Utilities.toast(requireContext(), getString(R.string.planet_not_available))
+            }
+        })
     }
 
     fun showPendingSurveyDialog() {
