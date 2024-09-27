@@ -4,17 +4,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/card_bg"
-    android:maxHeight="400dp"
     android:padding="10dp">
 
     <org.ole.planet.myplanet.utilities.CheckboxListView
         android:id="@+id/alertDialog_listView"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="18dp"
-        android:layout_marginTop="3dp"
-        android:minHeight="100dp"
+        android:layout_width="match_parent"
+        android:layout_height="300dp"
         android:scrollbars="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
