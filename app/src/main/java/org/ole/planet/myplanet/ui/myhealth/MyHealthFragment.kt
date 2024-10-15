@@ -188,8 +188,10 @@ class MyHealthFragment : Fragment() {
         fragmentVitalSignBinding.txtEmail.text = Utilities.checkNA(userModel?.email!!)
         fragmentVitalSignBinding.txtLanguage.text = Utilities.checkNA(userModel?.language!!)
         fragmentVitalSignBinding.txtDob.text = Utilities.checkNA(userModel?.dob!!)
-        Log.d("4597","searching for user ID: "+userId)
+        Log.d("4597","searching for user model: "+userModel?.toString())
         var mh = mRealm.where(RealmMyHealthPojo::class.java).equalTo("_id", userId).findFirst()
+        Log.d("4597","Eg RealmyHealthPojo: "+mRealm.where(RealmMyHealthPojo::class.java).findFirst())
+
         if (mh == null) {
             mh = mRealm.where(RealmMyHealthPojo::class.java).equalTo("_id", userId).findFirst()
         }

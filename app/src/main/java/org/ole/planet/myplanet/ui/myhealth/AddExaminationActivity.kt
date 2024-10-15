@@ -103,6 +103,7 @@ class AddExaminationActivity : AppCompatActivity(), CompoundButton.OnCheckedChan
 
         if (pojo != null && !TextUtils.isEmpty(pojo?.data)) {
             health = Gson().fromJson(decrypt(pojo?.data, user?.key, user?.iv), RealmMyHealth::class.java)
+            Log.d("4597", user?.key+": key: decrypted pojo from : "+health?.toString())
         }
         if (health == null) {
             initHealth()
