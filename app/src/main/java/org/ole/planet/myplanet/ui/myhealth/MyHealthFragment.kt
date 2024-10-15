@@ -6,6 +6,7 @@ import android.os.CountDownTimer
 import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -187,12 +188,15 @@ class MyHealthFragment : Fragment() {
         fragmentVitalSignBinding.txtEmail.text = Utilities.checkNA(userModel?.email!!)
         fragmentVitalSignBinding.txtLanguage.text = Utilities.checkNA(userModel?.language!!)
         fragmentVitalSignBinding.txtDob.text = Utilities.checkNA(userModel?.dob!!)
+        Log.d("4597","searching for user ID: "+userId)
         var mh = mRealm.where(RealmMyHealthPojo::class.java).equalTo("_id", userId).findFirst()
         if (mh == null) {
-            mh = mRealm.where(RealmMyHealthPojo::class.java).equalTo("userId", userId).findFirst()
+            mh = mRealm.where(RealmMyHealthPojo::class.java).equalTo("_id", userId).findFirst()
         }
         if (mh != null) {
             val mm = getHealthProfile(mh)
+            Log.d("4597","MM:"+mm.toString())
+
             if (mm == null) {
                 fragmentVitalSignBinding.rvRecords.adapter = null
                 Utilities.toast(activity, getString(R.string.health_record_not_available))

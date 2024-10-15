@@ -5,12 +5,14 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
+import android.util.Log
 import android.view.MenuItem
 import android.view.View
 import android.widget.CheckBox
 import android.widget.CompoundButton
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContentProviderCompat.requireContext
 import androidx.core.content.ContextCompat
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -51,6 +53,8 @@ class AddExaminationActivity : AppCompatActivity(), CompoundButton.OnCheckedChan
     var allowSubmission = true
     private lateinit var config: ChipCloudConfig
     private var examination: RealmMyHealthPojo? = null
+    lateinit var profileDbHandler: UserProfileDbHandler
+
     private fun initViews() {
         config = Utilities.getCloudConfig().selectMode(ChipCloud.SelectMode.close)
         activityAddExaminationBinding.btnAddDiag.setOnClickListener {
@@ -73,10 +77,30 @@ class AddExaminationActivity : AppCompatActivity(), CompoundButton.OnCheckedChan
         mRealm = DatabaseService(this).realmInstance
         userId = intent.getStringExtra("userId")
         pojo = mRealm.where(RealmMyHealthPojo::class.java).equalTo("_id", userId).findFirst()
+        user?.let { nonNullUser ->
+            if (nonNullUser.iv.isNullOrEmpty()) {
+                if (!mRealm.isInTransaction) mRealm.beginTransaction()
+                nonNullUser.iv = generateIv()
+                Log.d("4597", "Generated IV: ${nonNullUser.iv}")
+                mRealm.commitTransaction()
+            }
+
+            if (nonNullUser.key.isNullOrEmpty()) {
+                if (!mRealm.isInTransaction) mRealm.beginTransaction()
+                nonNullUser.key = generateKey()
+                Log.d("4597", "Generated Key: ${nonNullUser.key}")
+                mRealm.commitTransaction()
+            }
+        }
         if (pojo == null) {
             pojo = mRealm.where(RealmMyHealthPojo::class.java).equalTo("userId", userId).findFirst()
         }
-        user = mRealm.where(RealmUserModel::class.java).equalTo("id", userId).findFirst()
+        Log.d("4597", "Using: "+userId)
+
+        user =mRealm.where(RealmUserModel::class.java).equalTo("_id", userId).findFirst()
+
+        Log.d("4597", "DID WE FOUND USER ID: "+user?.key+" , "+user?.iv)
+
         if (pojo != null && !TextUtils.isEmpty(pojo?.data)) {
             health = Gson().fromJson(decrypt(pojo?.data, user?.key, user?.iv), RealmMyHealth::class.java)
         }
@@ -97,6 +121,7 @@ class AddExaminationActivity : AppCompatActivity(), CompoundButton.OnCheckedChan
     private fun initExamination() {
         if (intent.hasExtra("id")) {
             examination = mRealm.where(RealmMyHealthPojo::class.java).equalTo("_id", intent.getStringExtra("id")).findFirst()!!
+            Log.d("4597", "user key: "+user?.key+" , vec : "+user?.iv)
             activityAddExaminationBinding.etTemperature.setText(getString(R.string.number_placeholder, examination?.temperature))
             activityAddExaminationBinding.etPulseRate.setText(getString(R.string.number_placeholder, examination?.pulse))
             activityAddExaminationBinding.etBloodpressure.setText(getString(R.string.message_placeholder, examination?.bp))
@@ -259,9 +284,16 @@ class AddExaminationActivity : AppCompatActivity(), CompoundButton.OnCheckedChan
         examination?.isUpdated = true
         examination?.isHasInfo = hasInfo
         pojo?.isUpdated = true
+        Log.d("4597", "SIGN Object: "+sign.toString())
+        Log.d("4597", "Saving examination Object: "+examination.toString())
+
         try {
-            examination?.data = encrypt(Gson().toJson(sign), user?.key!!, user?.iv!!)
+            Log.d("4597"," user key: "+user?.key+"  user vector: "+user?.iv)
+            examination?.data = encrypt(Gson().toJson(sign), user?.key!!, user?.iv!!) // This doesnt work becuse the key and IV is null
+            Log.d("4597", " encrypted  GSON : " +examination?.data)
         } catch (e: Exception) {
+            Log.e("4597", "error saving the data " ,e)
+
             e.printStackTrace()
         }
         mRealm.commitTransaction()
@@ -329,7 +361,9 @@ class AddExaminationActivity : AppCompatActivity(), CompoundButton.OnCheckedChan
                 pojo?.userId = user?._id
             }
             health?.lastExamination = Date().time
+            Log.d("4597"," in createPojo user key:" +user?.key+" user vector: "+user?.iv)
             pojo?.data = encrypt(Gson().toJson(health), user?.key, user?.iv)
+            Log.d("4597"," in createPojo encrypted pojo data from user key vector is:" +pojo?.data)
         } catch (e: Exception) {
             e.printStackTrace()
             Utilities.toast(this, getString(R.string.unable_to_add_health_record))
