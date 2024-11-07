@@ -6,7 +6,6 @@ import android.graphics.drawable.AnimationDrawable
 import android.os.Build
 import android.os.Bundle
 import android.text.*
-import android.util.Log
 import android.view.*
 import android.webkit.URLUtil
 import android.widget.*
@@ -25,7 +24,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import okhttp3.ResponseBody
 import org.ole.planet.myplanet.BuildConfig
 import org.ole.planet.myplanet.MainApplication.Companion.applicationScope
 import org.ole.planet.myplanet.MainApplication.Companion.context
@@ -470,7 +468,6 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
 
         val userId = handler.userModel?.id
         if (userId != null && userId.startsWith("guest") == false) {
-            Log.d("okuro", "called")
             val latestAction = mRealm.where(RealmUserChallengeActions::class.java)
                 .equalTo("userId", userId).sort("time", Sort.DESCENDING).findFirst()
 

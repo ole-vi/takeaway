@@ -219,7 +219,7 @@ class ChatHistoryListAdapter(var context: Context, private var chatHistory: List
             val n = user?.let { it1 -> createNews(map, mRealm, it1, null) }
             if (section == "community") {
                 val latestAction = mRealm.where(RealmUserChallengeActions::class.java)
-                    .equalTo("userId", n?.userId).sort("time", Sort.DESCENDING).findFirst()
+                    .equalTo("userId", n?.userId).equalTo("actionType", "voice").sort("time", Sort.DESCENDING).findFirst()
 
                 val currentTime = System.currentTimeMillis()
                 val thresholdTime = 24 * 60 * 60 * 1000
