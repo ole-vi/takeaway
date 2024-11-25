@@ -185,9 +185,11 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
     }
 
     suspend fun isServerReachable(processedUrl: String?): Boolean {
+        Log.d("SyncActivity", "isServerReachable")
         return withContext(Dispatchers.IO) {
             val apiInterface = client?.create(ApiInterface::class.java)
             try {
+                Log.d("SyncActivity", "isServerReachable onResponse")
                 val response = apiInterface?.isPlanetAvailable("$processedUrl/_all_dbs")?.execute()
 
                 when {
@@ -305,6 +307,7 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
     }
 
     fun startSync() {
+        Log.d("SyncActivity", "startSync")
         SyncManager.instance?.start(this@SyncActivity)
     }
 
