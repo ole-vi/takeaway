@@ -25,7 +25,8 @@ import org.ole.planet.myplanet.model.MyPlanet
 import org.ole.planet.myplanet.model.RealmCommunity
 import org.ole.planet.myplanet.model.RealmUserModel.Companion.isUserExists
 import org.ole.planet.myplanet.model.RealmUserModel.Companion.populateUsersTable
-import org.ole.planet.myplanet.service.TransactionSyncManager
+import org.ole.planet.myplanet.service.TransactionSyncManager.logDuration
+import org.ole.planet.myplanet.service.TransactionSyncManager.syncDb
 import org.ole.planet.myplanet.service.UploadToShelfService
 import org.ole.planet.myplanet.ui.sync.ProcessUserDataActivity
 import org.ole.planet.myplanet.ui.sync.SyncActivity
@@ -105,6 +106,7 @@ class Service(private val context: Context) {
             callback.onError(context.getString(R.string.config_not_available), true)
             return
         }
+        val start = System.currentTimeMillis()
         retrofitInterface?.checkVersion(Utilities.getUpdateUrl(settings))?.enqueue(object : Callback<MyPlanet?> {
             override fun onResponse(call: Call<MyPlanet?>, response: Response<MyPlanet?>) {
                 preferences.edit().putInt("LastWifiID", NetworkUtils.getCurrentNetworkId(context)).apply()
@@ -143,9 +145,13 @@ class Service(private val context: Context) {
                                         callback.onError("Planet up to date", false)
                                     }
                                 }
+                                val end = System.currentTimeMillis()
+                                logDuration(start, end, "checkVersion")
                             } catch (e: Exception) {
                                 e.printStackTrace()
-                                callback.onError("New apk version required but not found on server - Contact admin", false)
+                                val end = System.currentTimeMillis()
+                                logDuration(start, end, "checkVersion")
+                                callback.onError("New apk version required  but not found on server - Contact admin", false)
                             }
                         }
                         override fun onFailure(call: Call<ResponseBody>, t: Throwable) {}
@@ -268,7 +274,7 @@ class Service(private val context: Context) {
                                         context.startUpload("becomeMember")
                                     }
                                 }
-                                TransactionSyncManager.syncDb(realm, "tablet_users")
+                                syncDb(realm, "tablet_users")
                             }
                         }
                     }
@@ -325,7 +331,7 @@ class Service(private val context: Context) {
             setText(context.getString(R.string.check_apk_version))
             show()
         }
-
+        val start = System.currentTimeMillis()
         retrofitInterface?.getConfiguration("$url/versions")?.enqueue(object : Callback<JsonObject?> {
             override fun onResponse(call: Call<JsonObject?>, response: Response<JsonObject?>) {
                 if (response.isSuccessful) {
@@ -355,6 +361,8 @@ class Service(private val context: Context) {
                                             val code = doc.getAsJsonPrimitive("code").asString
                                             listener?.onConfigurationIdReceived(id, code)
                                             activity.setSyncFailed(false)
+                                            val end = System.currentTimeMillis()
+                                            logDuration(start, end, "check app version")
                                         } else {
                                             activity.setSyncFailed(true)
                                             showAlertDialog(context.getString(R.string.failed_to_get_configuration_id), false)
