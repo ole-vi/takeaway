@@ -1,6 +1,7 @@
 package org.ole.planet.myplanet.ui.dashboard
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -17,6 +18,8 @@ import androidx.recyclerview.widget.RecyclerView
 import io.realm.Case
 import io.realm.Realm
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.filter
+import org.ole.planet.myplanet.BuildConfig
 import org.ole.planet.myplanet.R
 import org.ole.planet.myplanet.databinding.FragmentHomeBellBinding
 import org.ole.planet.myplanet.model.RealmCertification
@@ -33,14 +36,19 @@ import org.ole.planet.myplanet.ui.mylife.LifeFragment
 import org.ole.planet.myplanet.ui.resources.ResourcesFragment
 import org.ole.planet.myplanet.ui.submission.AdapterMySubmission
 import org.ole.planet.myplanet.ui.submission.MySubmissionFragment
+import org.ole.planet.myplanet.ui.sync.ProcessUserDataActivity
 import org.ole.planet.myplanet.ui.team.TeamFragment
 import org.ole.planet.myplanet.utilities.DialogUtils.guestDialog
 import org.ole.planet.myplanet.utilities.TimeUtils
 import java.util.Date
+import java.util.concurrent.ConcurrentHashMap
 
 class BellDashboardFragment : BaseDashboardFragment() {
     private lateinit var fragmentHomeBellBinding: FragmentHomeBellBinding
     private var networkStatusJob: Job? = null
+    private val serverCheckCache = ConcurrentHashMap<String, Long>()
+    private val cacheDuration = 5 * 60 * 1000L
+    private val serverCheckTimeout = 3000L
     private val viewModel: BellDashboardViewModel by viewModels()
     var user: RealmUserModel? = null
 
@@ -58,56 +66,127 @@ class BellDashboardFragment : BaseDashboardFragment() {
         super.onViewCreated(view, savedInstanceState)
         fragmentHomeBellBinding.cardProfileBell.txtDate.text = TimeUtils.formatDate(Date().time, "")
         fragmentHomeBellBinding.cardProfileBell.txtCommunityName.text = model?.planetCode
+
         setupNetworkStatusMonitoring()
+
         (activity as DashboardActivity?)?.supportActionBar?.hide()
         showBadges()
         checkPendingSurveys()
     }
 
-    private fun setupNetworkStatusMonitoring() {
-        networkStatusJob?.cancel()
-        networkStatusJob = viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.networkStatus.collect { status ->
-                    updateNetworkIndicator(status)
+    private fun getOptimizedServerUrls(): List<String> {
+        val primaryServer = settings?.getString("serverURL", "")
+        val lastReachableServer = settings?.getString("last_reachable_server", "")
+
+        val serverMappings = mapOf(
+            "http://${BuildConfig.PLANET_URIUR_URL}" to "http://35.231.161.29",
+            "http://192.168.1.202" to "http://34.35.29.147",
+            "https://${BuildConfig.PLANET_GUATEMALA_URL}" to "http://guatemala.com/cloudserver",
+            "http://${BuildConfig.PLANET_XELA_URL}" to "http://xela.com/cloudserver",
+            "http://${BuildConfig.PLANET_SANPABLO_URL}" to "http://sanpablo.com/cloudserver",
+            "http://${BuildConfig.PLANET_EMBAKASI_URL}" to "http://embakasi.com/cloudserver",
+            "https://${BuildConfig.PLANET_VI_URL}" to "http://vi.com/cloudserver"
+        )
+
+        return buildList {
+            // Add last reachable server if different from primary
+            if (lastReachableServer != null && lastReachableServer != primaryServer) {
+                add(lastReachableServer)
+            }
+
+            // Add primary server
+            if (primaryServer != null) {
+                add(primaryServer)
+            }
+
+            // Add ONLY the mapped fallback server for the primary server
+            serverMappings[primaryServer]?.let { fallbackServer ->
+                if (fallbackServer !in this) {
+                    add(fallbackServer)
                 }
             }
         }
     }
 
-    private suspend fun updateNetworkIndicator(status: NetworkStatus) {
-        if (!isAdded) return
-        val context = context ?: return
-
-        when (status) {
-            is NetworkStatus.Disconnected -> {
-                fragmentHomeBellBinding.cardProfileBell.imageView.borderColor =
-                    ContextCompat.getColor(context, R.color.md_red_700)
+    private suspend fun checkServerWithCache(url: String): Boolean {
+        val currentTime = System.currentTimeMillis()
+        return serverCheckCache[url]?.let { lastChecked ->
+            if (currentTime - lastChecked < cacheDuration) {
+                true
+            } else {
+                viewModel.checkServerConnection(url).also {
+                    serverCheckCache[url] = currentTime
+                }
             }
-            is NetworkStatus.Connecting -> {
-                fragmentHomeBellBinding.cardProfileBell.imageView.borderColor =
-                    ContextCompat.getColor(context, R.color.md_yellow_600)
+        } ?: viewModel.checkServerConnection(url).also {
+            serverCheckCache[url] = currentTime
+        }
+    }
 
-                val serverUrl = settings?.getString("serverURL", "")
-                if (!serverUrl.isNullOrEmpty()) {
-                    try {
-                        val canReachServer = viewModel.checkServerConnection(serverUrl)
-                        if (isAdded && view?.isAttachedToWindow == true) {
-                            fragmentHomeBellBinding.cardProfileBell.imageView.borderColor =
-                                ContextCompat.getColor(context, if (canReachServer) R.color.green else R.color.md_yellow_600)
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        if (isAdded && view?.isAttachedToWindow == true) {
-                            fragmentHomeBellBinding.cardProfileBell.imageView.borderColor =
-                                ContextCompat.getColor(context, R.color.md_yellow_600)
-                        }
+    private fun setupNetworkStatusMonitoring() {
+        networkStatusJob?.cancel()
+        networkStatusJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
+            var lastEmittedStatus: NetworkStatus? = null
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.networkStatus.filter { status ->
+                    status != lastEmittedStatus.also {
+                        lastEmittedStatus = status
+                    }
+                }.collect { status ->
+                    withContext(Dispatchers.Main) {
+                        updateNetworkIndicator(status)
                     }
                 }
             }
-            is NetworkStatus.Connected -> {
-                fragmentHomeBellBinding.cardProfileBell.imageView.borderColor = ContextCompat.getColor(context, R.color.green)
+        }
+    }
+
+    private suspend fun updateNetworkIndicator(status: NetworkStatus) = coroutineScope {
+        if (!isAdded || context == null) return@coroutineScope
+
+        val serverUrls = getOptimizedServerUrls()
+
+        // Log the full list of servers being attempted
+        Log.d("NetworkIndicator", "Attempting to connect to servers in order: $serverUrls")
+
+        fragmentHomeBellBinding.cardProfileBell.imageView.borderColor = ContextCompat.getColor(requireContext(), R.color.md_yellow_600)
+
+        val reachableServer = try {
+            withTimeout(serverCheckTimeout) {
+                serverUrls.firstNotNullOfOrNull { url ->
+                    async {
+                        Log.d("NetworkIndicator", "Checking server connection to: $url")
+                        if (checkServerWithCache(url)) {
+                            Log.d("NetworkIndicator", "Server successful: $url")
+                            url
+                        } else {
+                            Log.d("NetworkIndicator", "Server failed: $url")
+                            null
+                        }
+                    }.await()
+                }
             }
+        } catch (e: TimeoutCancellationException) {
+            Log.e("NetworkIndicator", "Server connection timeout", e)
+            null
+        }
+
+        reachableServer?.let {
+            editor?.putString("last_reachable_server", it)?.apply()
+        }
+
+        if (isAdded && view?.isAttachedToWindow == true) {
+            val colorRes = when {
+                reachableServer != null -> {
+                    val processedUrl = ProcessUserDataActivity.setUrlParts(reachableServer, settings?.getString("serverPin", "") ?: "")
+                    Log.d("BellDashboardFragment", "Server reachable: $processedUrl")
+                    if (processedUrl.isNotEmpty()) R.color.green else R.color.md_red_700
+                }
+                status is NetworkStatus.Disconnected -> R.color.md_red_700
+                else -> R.color.md_yellow_600
+            }
+
+            fragmentHomeBellBinding.cardProfileBell.imageView.borderColor = ContextCompat.getColor(requireContext(), colorRes)
         }
     }
 
