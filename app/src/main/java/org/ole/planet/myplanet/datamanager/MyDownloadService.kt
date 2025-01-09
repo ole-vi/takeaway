@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import io.realm.Realm
@@ -70,31 +71,64 @@ class MyDownloadService : Service() {
         return START_STICKY
     }
 
+    // In MyDownloadService.kt
     private fun initDownload(url: String, fromSync: Boolean) {
+        Log.d("DownloadDebug", "Attempting to download from URL: $url")
         val retrofitInterface = ApiClient.client?.create(ApiInterface::class.java)
         try {
             request = retrofitInterface?.downloadFile(header, url)
             val response = request?.execute()
+            Log.d("DownloadDebug", "Response code: ${response?.code()}")
 
             when {
                 response == null -> {
+                    Log.e("DownloadDebug", "Null response from server")
                     downloadFailed("Null response from server", fromSync)
                 }
                 response.isSuccessful -> {
+                    Log.d("DownloadDebug", "Download successful")
                     val responseBody = response.body()
                     if (!checkStorage(responseBody?.contentLength() ?: 0L)) {
                         responseBody?.let { downloadFile(it, url) }
                     }
                 }
                 else -> {
+                    Log.e("DownloadDebug", "Download failed with code: ${response.code()}")
                     val message = if (response.code() == 404) "File Not Found" else "Connection failed (${response.code()})"
                     downloadFailed(message, fromSync)
                 }
             }
         } catch (e: IOException) {
+            Log.e("DownloadDebug", "Download failed with exception", e)
             downloadFailed(e.localizedMessage ?: "Download failed due to an IO error", fromSync)
         }
     }
+
+//    private fun initDownload(url: String, fromSync: Boolean) {
+//        val retrofitInterface = ApiClient.client?.create(ApiInterface::class.java)
+//        try {
+//            request = retrofitInterface?.downloadFile(header, url)
+//            val response = request?.execute()
+//
+//            when {
+//                response == null -> {
+//                    downloadFailed("Null response from server", fromSync)
+//                }
+//                response.isSuccessful -> {
+//                    val responseBody = response.body()
+//                    if (!checkStorage(responseBody?.contentLength() ?: 0L)) {
+//                        responseBody?.let { downloadFile(it, url) }
+//                    }
+//                }
+//                else -> {
+//                    val message = if (response.code() == 404) "File Not Found" else "Connection failed (${response.code()})"
+//                    downloadFailed(message, fromSync)
+//                }
+//            }
+//        } catch (e: IOException) {
+//            downloadFailed(e.localizedMessage ?: "Download failed due to an IO error", fromSync)
+//        }
+//    }
 
     private fun downloadFailed(message: String, fromSync: Boolean) {
         notificationBuilder?.apply {
