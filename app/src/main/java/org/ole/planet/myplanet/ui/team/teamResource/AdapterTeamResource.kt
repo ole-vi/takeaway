@@ -31,28 +31,26 @@ class AdapterTeamResource(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolderTeamResource {
-        val binding = RowTeamResourceBinding.inflate(LayoutInflater.from(context), parent, false)
-        return ViewHolderTeamResource(binding)
+        val rowTeamResourceBinding = RowTeamResourceBinding.inflate(LayoutInflater.from(context), parent, false)
+        return ViewHolderTeamResource(rowTeamResourceBinding)
     }
 
     override fun onBindViewHolder(holder: ViewHolderTeamResource, position: Int) {
         val resource = list[position]
 
-        holder.binding.tvTitle.text = resource.title
-        holder.binding.tvDescription.text = resource.description
+        holder.rowTeamResourceBinding.tvTitle.text = resource.title
+        holder.rowTeamResourceBinding.tvDescription.text = resource.description
 
         holder.itemView.setOnClickListener {
             listener?.openLibraryDetailFragment(resource)
         }
 
-        holder.binding.ivRemove.setOnClickListener {
+        holder.rowTeamResourceBinding.ivRemove.setOnClickListener {
             removeResource(resource, position)
         }
-
-        holder.binding.ivRemove.visibility = if (settings.getString("userId", "--") == teamCreator) {
-            View.VISIBLE
-        } else {
-            View.GONE
+        val isLeader =settings.getString("userId", "--").equals(teamCreator, ignoreCase = true)
+        if (!isLeader) {
+            holder.rowTeamResourceBinding.ivRemove.visibility = View.GONE
         }
     }
 
@@ -76,5 +74,5 @@ class AdapterTeamResource(
         notifyItemRemoved(position)
     }
 
-    class ViewHolderTeamResource(val binding: RowTeamResourceBinding) : RecyclerView.ViewHolder(binding.root)
+    class ViewHolderTeamResource(val rowTeamResourceBinding: RowTeamResourceBinding) : RecyclerView.ViewHolder(rowTeamResourceBinding.root)
 }
