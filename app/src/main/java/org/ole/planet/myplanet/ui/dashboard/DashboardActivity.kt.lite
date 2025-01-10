@@ -161,8 +161,8 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
         createDrawer()
         if (!(user?.id?.startsWith("guest") == true && profileDbHandler.offlineVisits >= 3) && resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
             result?.openDrawer()
-        } //Opens drawer by default
-        result?.stickyFooter?.setPadding(0, 0, 0, 0) // moves logout button to the very bottom of the drawer. Without it, the "logout" button suspends a little.
+        }
+        result?.stickyFooter?.setPadding(0, 0, 0, 0)
         result?.actionBarDrawerToggle?.isDrawerIndicatorEnabled = true
         dl = result?.drawerLayout
         topbarSetting()
@@ -178,7 +178,7 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
         activityDashboardBinding.appBarBell.ivSync.setOnClickListener {
             lifecycleScope.launch {
                 if (isServerReachable(Utilities.getUrl())) {
-                    startUpload("dashboard")
+                    startUpload("")
                 }
             }
         }
@@ -249,10 +249,13 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
             }
         })
 
-        val startTime = 1733011200000
+        val startTime = 1730419200000
+        val endTime = 1734307200000
+
         val commVoiceResults = mRealm.where(RealmNews::class.java)
             .equalTo("userId", user?.id)
             .greaterThanOrEqualTo("time", startTime)
+            .lessThanOrEqualTo("time", endTime)
             .findAll()
 
         val commVoice = commVoiceResults.filter { realmNews ->
@@ -274,6 +277,7 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
 
         val allCommVoiceResults = mRealm.where(RealmNews::class.java)
             .greaterThanOrEqualTo("time", startTime)
+            .lessThanOrEqualTo("time", endTime)
             .findAll()
 
         val allCommVoice = allCommVoiceResults.filter { realmNews ->
@@ -328,8 +332,8 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
 
         val today = LocalDate.now()
         if (user?.id?.startsWith("guest") == false) {
-            val endDate = LocalDate.of(today.year, 12, 31)
-            if (today.isBefore(endDate)) {
+            val endDate = LocalDate.of(2025, 1, 16)
+            if (today.isAfter(LocalDate.of(2024, 11, 30)) && today.isBefore(endDate)) {
                 if (settings.getString("serverURL", "") in validUrls) {
                     val course = mRealm.where(RealmMyCourse::class.java)
                         .equalTo("courseId", courseId)
@@ -469,7 +473,7 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
         val pendingSurveys = getPendingSurveys(user?.id)
         val surveyTitles = getSurveyTitlesFromSubmissions(pendingSurveys)
         surveyTitles.forEach { title ->
-            createNotificationIfNotExists("survey", "you have a pending survey: $title", title)
+            createNotificationIfNotExists("survey", "$title", title)
         }
 
         val tasks = mRealm.where(RealmTeamTask::class.java)
@@ -478,18 +482,11 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
             .equalTo("assignee", user?.id)
             .findAll()
         tasks.forEach { task ->
-            createNotificationIfNotExists("task", "${task.title} is due in ${formatDate(task.deadline)}", task.id)
+            createNotificationIfNotExists("task","${task.title} ${formatDate(task.deadline)}", task.id)
         }
 
         val storageRatio = totalAvailableMemoryRatio
-        when {
-            storageRatio <= 10 -> {
-                createNotificationIfNotExists("storage", "${getString(R.string.storage_critically_low)} $storageRatio% ${getString(R.string.available_please_free_up_space)}", "storage")
-            }
-            storageRatio <= 40 -> {
-                createNotificationIfNotExists("storage", "${getString(R.string.storage_running_low)} $storageRatio% ${getString(R.string.available)}", "storage")
-            }
-        }
+        createNotificationIfNotExists("storage", "$storageRatio" , "storage")
     }
 
     private fun updateResourceNotification() {
@@ -501,10 +498,10 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
                 .findFirst()
 
             if (existingNotification != null) {
-                existingNotification.message = "you have $resourceCount resources not downloaded"
+                existingNotification.message = "$resourceCount"
                 existingNotification.relatedId = "$resourceCount"
             } else {
-                createNotificationIfNotExists("resource", "you have $resourceCount resources not downloaded", "$resourceCount")
+                createNotificationIfNotExists("resource", "$resourceCount", "$resourceCount")
             }
         } else {
             mRealm.where(RealmNotification::class.java)
@@ -738,6 +735,7 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
                 .addDrawerItems(*drawerItems).addStickyDrawerItems(*drawerItemsFooter)
                 .withOnDrawerItemClickListener { _: View?, _: Int, drawerItem: IDrawerItem<*, *>? ->
                     if (drawerItem != null) {
+                        result?.setSelection(drawerItem.identifier, false)
                         menuAction((drawerItem as Nameable<*>).name.textRes)
                     }
                     false
@@ -820,7 +818,7 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
             ResourcesCompat.getDrawable(resources, R.drawable.mycourses, null)?.let { menuImageList.add(it) }
             ResourcesCompat.getDrawable(resources, R.drawable.team, null)?.let { menuImageList.add(it) }
             ResourcesCompat.getDrawable(resources, R.drawable.business, null)?.let { menuImageList.add(it) }
-            ResourcesCompat.getDrawable(resources, R.drawable.survey, null)?.let { menuImageList.add(it) }
+            ResourcesCompat.getDrawable(resources, R.drawable.community, null)?.let { menuImageList.add(it) }
             ResourcesCompat.getDrawable(resources, R.drawable.survey, null)?.let { menuImageList.add(it) }
             return arrayOf(
                 changeUX(R.string.menu_myplanet, menuImageList[0]).withIdentifier(0),
@@ -853,6 +851,7 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
     }
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
+        item.isChecked = true
         when (item.itemId) {
             R.id.menu_library -> {
                 openCallFragment(ResourcesFragment())
@@ -881,6 +880,7 @@ class DashboardActivity : DashboardElementActivity(), OnHomeItemClickListener, N
                 openCallFragment(BellDashboardFragment())
             }
         }
+        item.isChecked = true
         return true
     }
 
