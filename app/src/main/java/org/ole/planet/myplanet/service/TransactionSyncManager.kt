@@ -4,12 +4,14 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.text.TextUtils
 import android.util.Base64
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import io.realm.Realm
 import org.ole.planet.myplanet.MainApplication
 import org.ole.planet.myplanet.callback.SyncListener
+import org.ole.planet.myplanet.datamanager.ApiClient.RetryInterceptor
 import org.ole.planet.myplanet.datamanager.ApiClient.client
 import org.ole.planet.myplanet.datamanager.ApiInterface
 import org.ole.planet.myplanet.model.DocumentResponse
@@ -44,7 +46,9 @@ import org.ole.planet.myplanet.utilities.JsonUtils.getJsonObject
 import org.ole.planet.myplanet.utilities.JsonUtils.getString
 import org.ole.planet.myplanet.utilities.Utilities
 import retrofit2.Response
+
 import java.io.IOException
+import kotlin.math.pow
 
 object TransactionSyncManager {
     fun authenticate(): Boolean {
@@ -112,30 +116,64 @@ object TransactionSyncManager {
     fun syncDb(realm: Realm, table: String) {
         realm.executeTransactionAsync { mRealm: Realm ->
             val apiInterface = client?.create(ApiInterface::class.java)
-            val allDocs = apiInterface?.getJsonObject(Utilities.header, Utilities.getUrl() + "/" + table + "/_all_docs?include_doc=false")
-            try {
-                val all = allDocs?.execute()
-                val rows = getJsonArray("rows", all?.body())
-                val keys: MutableList<String> = ArrayList()
-                for (i in 0 until rows.size()) {
-                    val `object` = rows[i].asJsonObject
-                    if (!TextUtils.isEmpty(getString("id", `object`))) keys.add(getString("key", `object`))
-                    if (i == rows.size() - 1 || keys.size == 1000) {
-                        val obj = JsonObject()
-                        obj.add("keys", Gson().fromJson(Gson().toJson(keys), JsonArray::class.java))
-                        val response = apiInterface?.findDocs(Utilities.header, "application/json", Utilities.getUrl() + "/" + table + "/_all_docs?include_docs=true", obj)?.execute()
-                        if (response?.body() != null) {
-                            val arr = getJsonArray("rows", response.body())
-                            if (table == "chat_history") {
-                                insertToChat(arr, mRealm)
-                            }
-                            insertDocs(arr, mRealm, table)
+
+            val retryInterceptor = RetryInterceptor()
+            var attempt = 0
+//            var response: Response? = null
+            var lastException: Exception? = null
+
+            while (attempt < retryInterceptor.maxRetryCount) {
+                try {
+                    // Timing for the first API call
+                    val startAllDocsTime = System.currentTimeMillis()
+                    val allDocs = apiInterface?.getJsonObject(Utilities.header, "${Utilities.getUrl()}/$table/_all_docs?include_doc=false")
+                    val all = allDocs?.execute()
+                    val allDocsDuration = System.currentTimeMillis() - startAllDocsTime
+                    Log.i("SyncTiming", "API call for table '$table' (_all_docs) completed in $allDocsDuration ms")
+
+                    val rows = getJsonArray("rows", all?.body())
+                    val keys: MutableList<String> = ArrayList()
+
+                    for (i in 0 until rows.size()) {
+                        val `object` = rows[i].asJsonObject
+                        if (!TextUtils.isEmpty(getString("id", `object`))) {
+                            keys.add(getString("key", `object`))
                         }
-                        keys.clear()
+
+                        if (i == rows.size() - 1 || keys.size == 1000) {
+                            val obj = JsonObject()
+                            obj.add("keys", Gson().fromJson(Gson().toJson(keys), JsonArray::class.java))
+
+                            // Timing for the second API call
+                            val startFindDocsTime = System.currentTimeMillis()
+                            val response = apiInterface?.findDocs(Utilities.header, "application/json", "${Utilities.getUrl()}/$table/_all_docs?include_docs=true", obj)?.execute()
+                            val findDocsDuration = System.currentTimeMillis() - startFindDocsTime
+                            Log.i("SyncTiming", "API call for table '$table' (findDocs) completed in $findDocsDuration ms")
+
+                            if (response?.body() != null) {
+                                val arr = getJsonArray("rows", response.body())
+                                if (table == "chat_history") {
+                                    insertToChat(arr, mRealm)
+                                }
+                                insertDocs(arr, mRealm, table)
+                            }
+                            keys.clear()
+                        }
+                    }
+                    break // If everything is successful, exit the loop
+
+                } catch (e: IOException) {
+                    lastException = e
+                    attempt++
+                    if (attempt < retryInterceptor.maxRetryCount) {
+                        val delayMillis = retryInterceptor.retryDelayMillis * 2.0.pow((attempt - 1).toDouble())
+                            .toLong()
+                        Thread.sleep(delayMillis)
+                    } else {
+                        e.printStackTrace()
+//                        handleException("Error syncing $table after $attempt attempts: ${e.message}")
                     }
                 }
-            } catch (e: IOException) {
-                e.printStackTrace()
             }
         }
     }

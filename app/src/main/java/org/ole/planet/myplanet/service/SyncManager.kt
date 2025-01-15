@@ -4,12 +4,19 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.wifi.SupplicantState
 import android.net.wifi.WifiManager
+import android.os.Handler
+import android.os.Looper
 import android.text.TextUtils
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import io.realm.Realm
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.ole.planet.myplanet.MainApplication
 import org.ole.planet.myplanet.R
 import org.ole.planet.myplanet.callback.SyncListener
@@ -93,38 +100,73 @@ class SyncManager private constructor(private val context: Context) {
             if (wifiInfo.supplicantState == SupplicantState.COMPLETED) {
                 settings.edit().putString("LastWifiSSID", wifiInfo.ssid).apply()
             }
+
             isSyncing = true
-            create(context, R.mipmap.ic_launcher, " Syncing data", "Please wait...")
-            mRealm = dbService.realmInstance
-            TransactionSyncManager.syncDb(mRealm, "tablet_users")
-            myLibraryTransactionSync()
-            TransactionSyncManager.syncDb(mRealm, "courses")
-            TransactionSyncManager.syncDb(mRealm, "exams")
-            TransactionSyncManager.syncDb(mRealm, "ratings")
-            TransactionSyncManager.syncDb(mRealm, "courses_progress")
-            TransactionSyncManager.syncDb(mRealm, "achievements")
-            TransactionSyncManager.syncDb(mRealm, "tags")
-            TransactionSyncManager.syncDb(mRealm, "submissions")
-            TransactionSyncManager.syncDb(mRealm, "news")
-            TransactionSyncManager.syncDb(mRealm, "feedback")
-            TransactionSyncManager.syncDb(mRealm, "teams")
-            TransactionSyncManager.syncDb(mRealm, "tasks")
-            TransactionSyncManager.syncDb(mRealm, "login_activities")
-            TransactionSyncManager.syncDb(mRealm, "meetups")
-            TransactionSyncManager.syncDb(mRealm, "health")
-            TransactionSyncManager.syncDb(mRealm, "certifications")
-            TransactionSyncManager.syncDb(mRealm, "team_activities")
-            TransactionSyncManager.syncDb(mRealm, "chat_history")
-            ManagerSync.instance?.syncAdmin()
-            resourceTransactionSync()
-            onSynced(mRealm, settings)
-            mRealm.close()
+            create(context, R.mipmap.ic_launcher, "Syncing data", "Please wait...")
+
+            // Incremental Sync Operations
+            val syncOperations = listOf<Pair<String, (Realm) -> Unit>>(
+                "tablet_users" to { realm -> TransactionSyncManager.syncDb(realm, "tablet_users") },
+                "courses" to { realm -> TransactionSyncManager.syncDb(realm, "courses") },
+                "exams" to { realm -> TransactionSyncManager.syncDb(realm, "exams") },
+                "ratings" to { realm -> TransactionSyncManager.syncDb(realm, "ratings") },
+                "courses_progress" to { realm -> TransactionSyncManager.syncDb(realm, "courses_progress") },
+                "achievements" to { realm -> TransactionSyncManager.syncDb(realm, "achievements") },
+                "tags" to { realm -> TransactionSyncManager.syncDb(realm, "tags") },
+                "submissions" to { realm -> TransactionSyncManager.syncDb(realm, "submissions") },
+                "news" to { realm -> TransactionSyncManager.syncDb(realm, "news") },
+                "feedback" to { realm -> TransactionSyncManager.syncDb(realm, "feedback") },
+                "teams" to { realm -> TransactionSyncManager.syncDb(realm, "teams") },
+                "tasks" to { realm -> TransactionSyncManager.syncDb(realm, "tasks") },
+                "login_activities" to { realm -> TransactionSyncManager.syncDb(realm, "login_activities") },
+                "meetups" to { realm -> TransactionSyncManager.syncDb(realm, "meetups") },
+                "health" to { realm -> TransactionSyncManager.syncDb(realm, "health") },
+                "certifications" to { realm -> TransactionSyncManager.syncDb(realm, "certifications") },
+                "team_activities" to { realm -> TransactionSyncManager.syncDb(realm, "team_activities") },
+                "chat_history" to { realm -> TransactionSyncManager.syncDb(realm, "chat_history") }
+            )
+
+            syncIncrementally(syncOperations) {
+                ManagerSync.instance?.syncAdmin()
+                GlobalScope.launch {
+                    resourceTransactionSync()
+
+                    // On completion
+                    mRealm = dbService.realmInstance
+                    onSynced(mRealm, settings)
+                    destroy()
+                }
+            }
         } catch (err: Exception) {
             err.printStackTrace()
             handleException(err.message)
-        } finally {
-            destroy()
         }
+    }
+
+    private fun syncIncrementally(operations: List<Pair<String, (Realm) -> Unit>>, onComplete: () -> Unit) {
+        val handler = Handler(Looper.getMainLooper())
+        var index = 0
+
+        val syncTask = object : Runnable {
+            override fun run() {
+                if (index < operations.size) {
+                    val (table, operation) = operations[index]
+                    Realm.getDefaultInstance().use { realm ->
+                        try {
+                            operation(realm)
+                        } catch (err: Exception) {
+                            err.printStackTrace()
+                            handleException("Error syncing $table: ${err.message}")
+                        }
+                    }
+                    index++
+                    handler.postDelayed(this, 100)
+                } else {
+                    onComplete()
+                }
+            }
+        }
+        handler.post(syncTask)
     }
 
     private fun handleException(message: String?) {
@@ -135,15 +177,18 @@ class SyncManager private constructor(private val context: Context) {
         }
     }
 
-    private fun resourceTransactionSync() {
+    private suspend fun resourceTransactionSync() {
         val apiInterface = client?.create(ApiInterface::class.java)
         try {
-            syncResource(apiInterface)
+            // Perform the sync operation on a background thread
+            withContext(Dispatchers.IO) {
+                syncResource(apiInterface)
+            }
         } catch (e: IOException) {
             e.printStackTrace()
+            handleException("Error during resource transaction sync: ${e.message}")
         }
     }
-
     @Throws(IOException::class)
     private fun syncResource(dbClient: ApiInterface?) {
         val newIds: MutableList<String?> = ArrayList()
