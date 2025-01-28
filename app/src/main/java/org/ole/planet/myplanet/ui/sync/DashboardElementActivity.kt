@@ -20,12 +20,9 @@ import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.bottomnavigation.BottomNavigationView
-import io.realm.Realm
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.ole.planet.myplanet.R
 import org.ole.planet.myplanet.callback.OnRatingChangeListener
 import org.ole.planet.myplanet.model.RealmUserChallengeActions.Companion.createAction
@@ -36,12 +33,13 @@ import org.ole.planet.myplanet.ui.courses.CoursesFragment
 import org.ole.planet.myplanet.ui.dashboard.BellDashboardFragment
 import org.ole.planet.myplanet.ui.dashboard.DashboardFragment
 import org.ole.planet.myplanet.ui.feedback.FeedbackFragment
-import org.ole.planet.myplanet.ui.resources.ResourcesFragment
 import org.ole.planet.myplanet.ui.rating.RatingFragment.Companion.newInstance
+import org.ole.planet.myplanet.ui.resources.ResourcesFragment
 import org.ole.planet.myplanet.ui.team.TeamFragment
 import org.ole.planet.myplanet.utilities.Constants
 import org.ole.planet.myplanet.utilities.Constants.PREFS_NAME
 import org.ole.planet.myplanet.utilities.Constants.showBetaFeature
+import org.ole.planet.myplanet.utilities.ServerUrlMapper
 import org.ole.planet.myplanet.utilities.SharedPrefManager
 import org.ole.planet.myplanet.utilities.Utilities
 
@@ -56,6 +54,7 @@ abstract class DashboardElementActivity : SyncActivity(), FragmentManager.OnBack
         profileDbHandler = UserProfileDbHandler(this)
         settings = applicationContext.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         prefData = SharedPrefManager(this)
+        supportFragmentManager.addOnBackStackChangedListener(this)
     }
 
     fun onClickTabItems(position: Int) {
@@ -151,24 +150,23 @@ abstract class DashboardElementActivity : SyncActivity(), FragmentManager.OnBack
     }
 
     fun logSyncInSharedPrefs() {
-        lifecycleScope.launch(Dispatchers.IO + SupervisorJob()) {
-            try {
-                val isReachable = isServerReachable(Utilities.getUrl())
-                if (isReachable) {
-                    withContext(Dispatchers.Main) {
-                        startUpload("")
-                    }
+        val serverUrlMapper = ServerUrlMapper(this, settings, editor)
+        val url = Utilities.getUrl()
 
-                    withContext(Dispatchers.IO) {
-                        Realm.getDefaultInstance().use { realm ->
-                            realm.executeTransaction {
-                                createAction(realm, "${profileDbHandler.userModel?.id}", null, "sync")
-                            }
-                        }
-                    }
+        lifecycleScope.launch {
+            when (val result = serverUrlMapper.performUrlSync(
+                url = url,
+                onStartSync = { startUpload("dashboard") },
+                onLogSync = {
+                    createAction(mRealm, "${profileDbHandler.userModel?.id}", null, "sync")
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
+            )) {
+                is ServerUrlMapper.ConnectionResult.Success -> {
+                    // Connection successful, sync operations completed
+                }
+                is ServerUrlMapper.ConnectionResult.Failure -> {
+                    // Both primary and alternative URLs are unreachable
+                }
             }
         }
     }
@@ -249,13 +247,13 @@ abstract class DashboardElementActivity : SyncActivity(), FragmentManager.OnBack
         val f = supportFragmentManager.findFragmentById(R.id.fragment_container)
         val fragmentTag = f?.tag
         if (f is CoursesFragment) {
-            if ("shelf" == fragmentTag) {
+            if ("MyCoursesFragment" == fragmentTag) {
                 navigationView.menu.findItem(R.id.menu_mycourses).isChecked = true
             } else {
                 navigationView.menu.findItem(R.id.menu_courses).isChecked = true
             }
         } else if (f is ResourcesFragment) {
-            if ("shelf" == fragmentTag) {
+            if ("MyResourcesFragment" == fragmentTag) {
                 navigationView.menu.findItem(R.id.menu_mylibrary).isChecked = true
             } else {
                 navigationView.menu.findItem(R.id.menu_library).isChecked = true

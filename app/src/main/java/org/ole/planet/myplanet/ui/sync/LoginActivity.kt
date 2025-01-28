@@ -194,10 +194,6 @@ class LoginActivity : SyncActivity(), TeamListAdapter.OnItemClickListener {
                 false
             }
             setUpLanguageButton()
-            if (defaultPref.getBoolean("saveUsernameAndPassword", false)) {
-                activityLoginBinding.inputName.setText(settings.getString(getString(R.string.login_user), ""))
-                activityLoginBinding.inputPassword.setText(settings.getString(getString(R.string.login_password), ""))
-            }
             if (NetworkUtils.isNetworkConnected) {
                 service.syncPlanetServers(mRealm) { success: String? ->
                     toast(this, success)
@@ -236,7 +232,7 @@ class LoginActivity : SyncActivity(), TeamListAdapter.OnItemClickListener {
         if (!teams.isNullOrEmpty()) {
             activityLoginBinding.team.visibility = View.VISIBLE
             teamAdapter = ArrayAdapter(this, R.layout.spinner_item_white, teamList)
-            teamAdapter?.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            teamAdapter?.setDropDownViewResource(R.layout.custom_simple_list_item_1)
             teamList.clear()
             teamList.add(getString(R.string.select_team))
             for (team in teams) {

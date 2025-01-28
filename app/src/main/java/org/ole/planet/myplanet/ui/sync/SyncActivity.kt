@@ -3,6 +3,7 @@ package org.ole.planet.myplanet.ui.sync
 import android.Manifest
 import android.content.*
 import android.graphics.drawable.AnimationDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.*
@@ -112,15 +113,15 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
         processedUrl = Utilities.getUrl()
     }
 
-    override fun onConfigurationIdReceived(id: String, code:String) {
+    override fun onConfigurationIdReceived(id: String, code: String, url: String, isAlternativeUrl: Boolean) {
         val savedId = settings.getString("configurationId", null)
         if (serverConfigAction == "sync") {
             if (savedId == null) {
                 editor.putString("configurationId", id).apply()
                 editor.putString("communityName", code).apply()
-                currentDialog?.let { continueSync(it) }
+                currentDialog?.let { continueSync(it, url, isAlternativeUrl) }
             } else if (id == savedId) {
-                currentDialog?.let { continueSync(it) }
+                currentDialog?.let { continueSync(it, url, isAlternativeUrl) }
             } else {
                 clearDataDialog(getString(R.string.you_want_to_connect_to_a_different_server), false)
             }
@@ -188,7 +189,11 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
         return withContext(Dispatchers.IO) {
             val apiInterface = client?.create(ApiInterface::class.java)
             try {
-                val response = apiInterface?.isPlanetAvailable("$processedUrl/_all_dbs")?.execute()
+                val response = if (settings.getBoolean("isAlternativeUrl", false)){
+                    apiInterface?.isPlanetAvailable("$processedUrl/db/_all_dbs")?.execute()
+                } else {
+                    apiInterface?.isPlanetAvailable("$processedUrl/_all_dbs")?.execute()
+                }
 
                 when {
                     response?.isSuccessful == true -> {
@@ -351,6 +356,12 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
                     createLog("synced successfully")
                 }
                 showSnack(findViewById(android.R.id.content), getString(R.string.sync_completed))
+                if (settings.getBoolean("isAlternativeUrl", false)) {
+                    editor.putString("alternativeUrl", "")
+                    editor.putString("processedAlternativeUrl", "")
+                    editor.putBoolean("isAlternativeUrl", false)
+                    editor.apply()
+                }
                 downloadAdditionalResources()
                 if (defaultPref.getBoolean("beta_auto_download", false)) {
                     backgroundDownload(downloadAllFiles(getAllLibraryList(mRealm)))
@@ -593,12 +604,11 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
                 ServerAddressesModel(getString(R.string.sync_somalia), BuildConfig.PLANET_SOMALIA_URL),
                 ServerAddressesModel(getString(R.string.sync_vi), BuildConfig.PLANET_VI_URL),
                 ServerAddressesModel(getString(R.string.sync_xela), BuildConfig.PLANET_XELA_URL),
-                //ServerAddressesModel(getString(R.string.sync_uriur), BuildConfig.PLANET_URIUR_URL),
+                ServerAddressesModel(getString(R.string.sync_uriur), BuildConfig.PLANET_URIUR_URL),
                 ServerAddressesModel(getString(R.string.sync_ruiru), BuildConfig.PLANET_RUIRU_URL),
                 ServerAddressesModel(getString(R.string.sync_embakasi), BuildConfig.PLANET_EMBAKASI_URL),
                 ServerAddressesModel(getString(R.string.sync_cambridge), BuildConfig.PLANET_CAMBRIDGE_URL),
                 //ServerAddressesModel(getString(R.string.sync_egdirbmac), BuildConfig.PLANET_EGDIRBMAC_URL),
-                ServerAddressesModel(getString(R.string.sync_palmbay), BuildConfig.PLANET_PALMBAY_URL)
             )
 
             val storedUrl = settings.getString("serverURL", null)
@@ -609,7 +619,7 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
                 val actualUrl = serverListAddress.url.replace(Regex("^https?://"), "")
                 binding.inputServerUrl.setText(actualUrl)
                 binding.inputServerPassword.setText(getPinForUrl(actualUrl))
-                val protocol = if (actualUrl == BuildConfig.PLANET_XELA_URL || actualUrl == BuildConfig.PLANET_SANPABLO_URL) "http://" else "https://"
+                val protocol = if (actualUrl == BuildConfig.PLANET_XELA_URL || actualUrl == BuildConfig.PLANET_SANPABLO_URL ||  actualUrl == BuildConfig.PLANET_URIUR_URL) "http://" else "https://"
                 editor.putString("serverProtocol", protocol).apply()
                 if (serverCheck) {
                     performSync(dialog)
@@ -688,12 +698,11 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
             BuildConfig.PLANET_SOMALIA_URL to BuildConfig.PLANET_SOMALIA_PIN,
             BuildConfig.PLANET_VI_URL to BuildConfig.PLANET_VI_PIN,
             BuildConfig.PLANET_XELA_URL to BuildConfig.PLANET_XELA_PIN,
-//            BuildConfig.PLANET_URIUR_URL to BuildConfig.PLANET_URIUR_PIN,
+            BuildConfig.PLANET_URIUR_URL to BuildConfig.PLANET_URIUR_PIN,
             BuildConfig.PLANET_RUIRU_URL to BuildConfig.PLANET_RUIRU_PIN,
             BuildConfig.PLANET_EMBAKASI_URL to BuildConfig.PLANET_EMBAKASI_PIN,
             BuildConfig.PLANET_CAMBRIDGE_URL to BuildConfig.PLANET_CAMBRIDGE_PIN,
 //            BuildConfig.PLANET_EGDIRBMAC_URL to BuildConfig.PLANET_EGDIRBMAC_PIN,
-            BuildConfig.PLANET_PALMBAY_URL to BuildConfig.PLANET_PALMBAY_PIN
         )
         return pinMap[url] ?: ""
     }
@@ -746,8 +755,38 @@ abstract class SyncActivity : ProcessUserDataActivity(), SyncListener, CheckVers
         return modifiedUrl
     }
 
-    private fun continueSync(dialog: MaterialDialog) {
-        processedUrl = saveConfigAndContinue(dialog)
+    private fun continueSync(dialog: MaterialDialog, url: String, isAlternativeUrl: Boolean) {
+        if (isAlternativeUrl) {
+            val password = "${(dialog.customView?.findViewById<View>(R.id.input_server_Password) as EditText).text}"
+            val uri = Uri.parse(url)
+            var couchdbURL: String
+            val urlUser: String
+            val urlPwd: String
+            if (url.contains("@")) {
+                val userinfo = getUserInfo(uri)
+                urlUser = userinfo[0]
+                urlPwd = userinfo[1]
+                couchdbURL = url
+            } else {
+                urlUser = "satellite"
+                urlPwd = password
+                couchdbURL = "${uri.scheme}://$urlUser:$urlPwd@${uri.host}:${if (uri.port == -1) (if (uri.scheme == "http") 80 else 443) else uri.port}"
+            }
+            editor.putString("serverPin", password)
+            editor.putString("url_user", urlUser)
+            editor.putString("url_pwd", urlPwd)
+            editor.putString("url_Scheme", uri.scheme)
+            editor.putString("url_Host", uri.host)
+            editor.putString("alternativeUrl", url)
+            editor.putString("processedAlternativeUrl", couchdbURL)
+            editor.putBoolean("isAlternativeUrl", true)
+            editor.apply()
+
+            processedUrl = couchdbURL
+        } else {
+            processedUrl = saveConfigAndContinue(dialog)
+        }
+
         if (TextUtils.isEmpty(processedUrl)) return
         isSync = true
         if (checkPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) && settings.getBoolean("firstRun", true)) {
