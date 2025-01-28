@@ -10,8 +10,8 @@ android {
         applicationId "org.ole.planet.myplanet"
         minSdkVersion 26
         targetSdkVersion 34
-        versionCode 2188
-        versionName "0.21.88"
+        versionCode 2245
+        versionName "0.22.45"
         ndkVersion '21.3.6528147'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -101,8 +101,6 @@ android {
     def planetCambridgePin = project.findProperty('PLANET_CAMBRIDGE_PIN') ?: ""
     //def planetEgdirbmacUrl = project.findProperty('PLANET_EGDIRBMAC_URL') ?: ""
     //def planetEgdirbmacPin = project.findProperty('PLANET_EGDIRBMAC_PIN') ?: ""
-    def planetPalmBayUrl = project.findProperty('PLANET_PALMBAY_URL') ?: ""
-    def planetPalmBayPin = project.findProperty('PLANET_PALMBAY_PIN') ?: ""
 
     buildTypes.each {
         it.buildConfigField 'String', 'PLANET_LEARNING_URL', "\"$planetLearningUrl\""
@@ -135,8 +133,6 @@ android {
         it.buildConfigField 'String', 'PLANET_CAMBRIDGE_PIN', "\"${planetCambridgePin}\""
         //it.buildConfigField 'String', 'PLANET_EGDIRBMAC_URL', "\"${planetEgdirbmacUrl}\""
         //it.buildConfigField 'String', 'PLANET_EGDIRBMAC_PIN', "\"${planetEgdirbmacPin}\""
-        it.buildConfigField 'String', 'PLANET_PALMBAY_URL', "\"${planetPalmBayUrl}\""
-        it.buildConfigField 'String', 'PLANET_PALMBAY_PIN', "\"${planetPalmBayPin}\""
     }
 }
 
@@ -170,7 +166,7 @@ dependencies {
     implementation 'androidx.legacy:legacy-support-v4:1.0.0'
     implementation 'androidx.multidex:multidex:2.0.1'
     implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.recyclerview:recyclerview:1.4.0'
     implementation 'androidx.annotation:annotation:1.9.1'
     implementation 'androidx.exifinterface:exifinterface:1.3.7'
     implementation 'androidx.legacy:legacy-support-v4:1.0.0'
@@ -193,14 +189,14 @@ dependencies {
     implementation 'com.borax12.materialdaterangepicker:library:2.0'
     implementation 'com.nex3z:toggle-button-group:1.2.3'
     implementation 'com.caverock:androidsvg-aar:1.4'
-    implementation('com.opencsv:opencsv:5.9') {
+    implementation('com.opencsv:opencsv:5.10') {
         exclude group: 'commons-logging', module: 'commons-logging'
     }
 
     implementation 'de.hdodenhof:circleimageview:3.1.0'
     implementation 'de.rtner:PBKDF2:1.1.4'
     implementation 'org.osmdroid:osmdroid-android:6.1.20'
-    implementation 'org.jetbrains:annotations:26.0.1'
+    implementation 'org.jetbrains:annotations:26.0.2'
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0"
     implementation 'pl.droidsonroids.gif:android-gif-drawable:1.2.29'
