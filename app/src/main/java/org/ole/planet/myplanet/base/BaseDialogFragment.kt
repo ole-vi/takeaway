@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.fragment.app.DialogFragment
 
 abstract class BaseDialogFragment : DialogFragment() {
-    @JvmField
     var id: String? = null
     var teamId: String? = null
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -25,7 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.ole.planet.myplanet.R
 import org.ole.planet.myplanet.callback.OnRatingChangeListener
-import org.ole.planet.myplanet.model.RealmUserChallengeActions.Companion.createAction
+import org.ole.planet.myplanet.model.RealmUserChallengeActions
 import org.ole.planet.myplanet.service.UserProfileDbHandler
 import org.ole.planet.myplanet.ui.SettingActivity
 import org.ole.planet.myplanet.ui.community.CommunityTabFragment
@@ -33,7 +33,7 @@ import org.ole.planet.myplanet.ui.courses.CoursesFragment
 import org.ole.planet.myplanet.ui.dashboard.BellDashboardFragment
 import org.ole.planet.myplanet.ui.dashboard.DashboardFragment
 import org.ole.planet.myplanet.ui.feedback.FeedbackFragment
-import org.ole.planet.myplanet.ui.rating.RatingFragment.Companion.newInstance
+import org.ole.planet.myplanet.ui.rating.RatingFragment
 import org.ole.planet.myplanet.ui.resources.ResourcesFragment
 import org.ole.planet.myplanet.ui.team.TeamFragment
 import org.ole.planet.myplanet.utilities.Constants
@@ -158,7 +158,7 @@ abstract class DashboardElementActivity : SyncActivity(), FragmentManager.OnBack
                 url = url,
                 onStartSync = { startUpload("dashboard") },
                 onLogSync = {
-                    createAction(mRealm, "${profileDbHandler.userModel?.id}", null, "sync")
+                    RealmUserChallengeActions.createAction(mRealm, "${profileDbHandler.userModel?.id}", null, "sync")
                 }
             )) {
                 is ServerUrlMapper.ConnectionResult.Success -> {
@@ -238,7 +238,7 @@ abstract class DashboardElementActivity : SyncActivity(), FragmentManager.OnBack
     }
 
     fun showRatingDialog(type: String?, resourceId: String?, title: String?, listener: OnRatingChangeListener?) {
-        val f = newInstance(type, resourceId, title)
+        val f = RatingFragment.newInstance(type, resourceId, title)
         f.setListener(listener)
         f.show(supportFragmentManager, "")
     }

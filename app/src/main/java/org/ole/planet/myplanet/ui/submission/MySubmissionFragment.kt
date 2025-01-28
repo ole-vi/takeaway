@@ -14,13 +14,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import io.realm.Case
 import io.realm.Realm
 import io.realm.RealmQuery
-import org.ole.planet.myplanet.base.BaseRecyclerFragment.Companion.showNoData
+import org.ole.planet.myplanet.base.BaseRecyclerFragment
 import org.ole.planet.myplanet.databinding.FragmentMySubmissionBinding
 import org.ole.planet.myplanet.datamanager.DatabaseService
 import org.ole.planet.myplanet.model.RealmStepExam
-import org.ole.planet.myplanet.model.RealmStepExam.Companion.getIds
 import org.ole.planet.myplanet.model.RealmSubmission
-import org.ole.planet.myplanet.model.RealmSubmission.Companion.getExamMap
 import org.ole.planet.myplanet.model.RealmUserModel
 import org.ole.planet.myplanet.service.UserProfileDbHandler
 
@@ -51,7 +49,7 @@ class MySubmissionFragment : Fragment(), CompoundButton.OnCheckedChangeListener 
             DividerItemDecoration(activity, DividerItemDecoration.VERTICAL)
         )
         submissions = mRealm.where(RealmSubmission::class.java).findAll()
-        exams = getExamMap(mRealm, submissions)
+        exams = RealmSubmission.getExamMap(mRealm, submissions)
         setData("")
         fragmentMySubmissionBinding.etSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(charSequence: CharSequence, i: Int, i1: Int, i2: Int) {}
@@ -96,7 +94,7 @@ class MySubmissionFragment : Fragment(), CompoundButton.OnCheckedChangeListener 
         if (!TextUtils.isEmpty(s)) {
             val ex: List<RealmStepExam> = mRealm.where(RealmStepExam::class.java)
                 .contains("name", s, Case.INSENSITIVE).findAll()
-            q?.`in`("parentId", getIds(ex))
+            q?.`in`("parentId", RealmStepExam.getIds(ex))
         }
         if (q != null) {
             submissions = q.findAll().mapNotNull { it as? RealmSubmission }
@@ -109,9 +107,9 @@ class MySubmissionFragment : Fragment(), CompoundButton.OnCheckedChangeListener 
             fragmentMySubmissionBinding.llSearch.visibility = View.VISIBLE
             fragmentMySubmissionBinding.title.visibility = View.VISIBLE
             if (fragmentMySubmissionBinding.rbSurvey.isChecked) {
-                showNoData(fragmentMySubmissionBinding.tvMessage, itemCount, "survey_submission")
+                BaseRecyclerFragment.showNoData(fragmentMySubmissionBinding.tvMessage, itemCount, "survey_submission")
             } else {
-                showNoData(fragmentMySubmissionBinding.tvMessage, itemCount, "exam_submission")
+                BaseRecyclerFragment.showNoData(fragmentMySubmissionBinding.tvMessage, itemCount, "exam_submission")
             }
 
             if (itemCount == 0) {

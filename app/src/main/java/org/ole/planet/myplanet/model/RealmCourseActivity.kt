@@ -23,7 +23,6 @@ open class RealmCourseActivity : RealmObject() {
     var user: String? = null
 
     companion object {
-        @JvmStatic
         suspend fun createActivity(realm: Realm, userModel: RealmUserModel?, course: RealmMyCourse?) {
             withContext(Dispatchers.IO) {
                 try {
@@ -45,7 +44,6 @@ open class RealmCourseActivity : RealmObject() {
             }
         }
 
-        @JvmStatic
         fun serializeSerialize(realmCourseActivities: RealmCourseActivity): JsonObject {
             val ob = JsonObject()
             ob.addProperty("user", realmCourseActivities.user)
